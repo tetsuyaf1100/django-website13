@@ -1,9 +1,18 @@
 from django.contrib import admin
 from . import models
+from django import forms
+from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.admin import AdminSite
+
+class PostInline(admin.TabularInline):
+    model = models.Post
+    fields = ('title', 'body')
+    extra = 1
+
 
 @admin.register(models.Category)
 class CategoryAdmin(admin.ModelAdmin):
-    pass
+    inlines = [PostInline]
 
 
 @admin.register(models.Tag)
@@ -28,8 +37,36 @@ class PostTitleFilter(admin.SimpleListFilter):
         ]
 
 
+class PostAdminForm(forms.ModelForm):
+    class Meta:
+        labels = {
+            'title': 'ブログタイトル',
+        }
+    def clean(self):
+        body = self.cleaned_data.get('body')
+        if '<' in body:
+            raise forms.ValidationError('HTMLタグは使えません。')
+
+
 @admin.register(models.Post)
 class PostAdmin(admin.ModelAdmin):
+    #fields = ('title',)
+    #fields = ('title', 'body', 'category', 'tags')
+    readonly_fields = ('created', 'updated')
+    #fields = ('title', 'body', 'category', 'tags', 'created', 'updated')
+    fieldsets = [
+        (None, {'fields': ('title', )}),
+        ('コンテンツ', {'fields': ('body', )}),
+        ('分類', {'fields': ('category', 'tags')}),
+        ('メタ', {'fields': ('created', 'updated')})
+    ]
+    filter_horizontal = ('tags',)
+
+    def save_model(self, request, obj, form, change):
+        print("before save")
+        super().save_model(request, obj, form, change)
+        print("after save")
+
     list_display = ('id', 'title', 'category', 'tags_summary', 'published', 'created', 'updated')
     list_select_related = ('category', )
     list_editable = ('title', 'category')
@@ -56,10 +93,10 @@ class PostAdmin(admin.ModelAdmin):
         queryset.update(published=False)
         
     unpublish.short_description = "下書きに戻す"
+    form = PostAdminForm
+    class Media:
+        js = ('post.js',)
 
-
-from django.contrib.auth.forms import AuthenticationForm
-from django.contrib.admin import AdminSite
 
 class BlogAdminSite(AdminSite):
     site_header = 'マイページ'
@@ -77,4 +114,3 @@ mypage_site = BlogAdminSite(name="mypage")
 mypage_site.register(models.Post)
 mypage_site.register(models.Tag)
 mypage_site.register(models.Category)
-
